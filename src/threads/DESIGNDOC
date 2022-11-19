@@ -1,0 +1,217 @@
+			+--------------------+
+			|         OS         |
+			| PROJECT 1: THREADS |
+			|   DESIGN DOCUMENT  |
+			+--------------------+
+
+---- GROUP 13 ----
+
+>> Fill in the names, email addresses and matriculation numbers of your group members.
+
+Manas Mulpuri <mulpuri.m@iitgn.ac.in> 19110093
+Viramgami Gaurav <viramgami.g@iitgn.ac.in> 19110106
+Yash More Hiren <yash.mh@iitgn.ac.in> 19110123
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+[1] Downey, Allen. The little book of semaphores. Green Tea Press, 2008.
+
+			     ALARM CLOCK
+			     ===========
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+ - Added new variable inside thread.h, in struct thread to store the waketime of the thread if it is in sleep.
+   int64_t wake_time;
+   
+ - Added global pintos list inside thread.c to store the list of processes which are in sleep state in ascending order of their wake_time.
+   static struct list sleeping_list;
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe what happens in a call to timer_sleep(),
+>> including the effects of the timer interrupt handler.
+
+ - In timer_sleep() (defined inside timer.c):
+   - It calls thread_sleep function.
+   
+ - In thread_sleep() (defined inside thread.c):
+   - Returns if sleeping ticks <= 0.
+   - Else disable the interrupt, define current threads wake_time.
+   - Then push current thread's elem to sleeping list such that the list is sorted in ascending order of wake_time using waketime_compare function.
+   - Block the current thread so that it cannot be run and revert the changes to interrupt.
+ 
+ - In waketime_compare() (defined inside thread.c):
+   - It is a comparator function which returns the boolean value based on least wake_time.
+ 
+ - In timer_interrupt() (defined inside timer.c):
+   - It additionally calls thread_wakeup function.
+   
+ - In thread_wakeup() (defined inside thread.c):
+   - Disables interrupt and iterates in the sleeping_list to see if any thread has to be woken up and wake them up by unblocking and removing from the sleeping_list.
+   - Once a thread which doesn't need to be woken up is encountered we break the iteration.
+   - Revert the changes to interrupt.
+
+>> A3: What steps are taken to minimize the amount of time spent in
+>> the timer interrupt handler?
+
+ - In timer interrupt handler time is minimized as we sort the sleeping_list according to wake_time which optimizes execution time of thread_wake which is called in
+   timer_interrupt as we do not have to go through all of the elements in the sleeping_list.
+
+---- SYNCHRONIZATION ----
+
+>> A4: How are race conditions avoided when multiple threads call
+>> timer_sleep() simultaneously?
+
+ - We disable the interrupts every time while updating(pushing) sleeping_list as it is shared between all threads.
+
+>> A5: How are race conditions avoided when a timer interrupt occurs
+>> during a call to timer_sleep()?
+
+ - We disable the interrupts every time while updating(popping) sleeping_list as it is shared between all threads.
+
+---- RATIONALE ----
+
+>> A6: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+ - As we didn't want to have a busy wait we thought of adding all the threads which are supposed to be sleeping in a ordered list. 
+   We first considered the list to be unordered but this would make timer_interrupt inefficient so we decided to make it ordered.
+
+    		     PROD/CONS
+	  		     =========
+
+---- SYNCHRONIZATION ----
+
+>> B1: How does your solution guarantee that consumers will hold until
+>> there is something to consume in the buffer?
+
+ - As the consumer threads are doing a conditional waiting while the buffer is empty by using a condition variable c and maintaining
+   count variable.
+
+>> B2: How does your solution guarantee that producers will hold until
+>> there is some free space in the buffer?
+
+ - As the producer threads are doing a conditional waiting while the buffer is full by using a condition variable p and maintaining
+   count variable.
+
+>> B3: How does your solution preserve a FIFO semantics i.e., the first
+>> character produced will be the first to be consumed?
+
+ - The consumer threads are accessing the characters in the buffer at consumer_index. 
+ - consumer_index is shared between all threads, initialized with 0 and incremented by 1 after reading a character from the buffer.
+ - When consumer_index is larger than buffer size it agains starts from 0 as the producer also writes from the starting once producer_index is larger than the 
+   buffer size. (left to right cyclic read/write)
+
+---- RATIONALE ----
+
+>> B4: Give an intuition for why your program preserves safety.
+
+ - Before accessing any shared variable the threads must acquire the mutex lock, which ensures that only one thread is accessing the shared variable at a time.
+ - Producers wait if the buffer is full and the cosumers wait if the buffer is empty.
+ - Producers write character by character in order of the given string and consumers also read character by character in order of the given string. 
+
+>> B5: Why did you choose this design? Did you consider other design
+>> alternatives? In what ways is it superior to another design you considered?
+
+ - We thought of creating new thread for each producer and consumer. Since we were constrained to use only locks and conditional variables, we used conditional
+   waiting inside while loop to ensure the case of multiple producers and multiple consumers.
+ - Our first implementation had complex condition over while loop to check if the buffer is full or empty, then we maintained count to implement it in simpler
+   way.
+
+
+			     NARROW BRIDGE
+			     =============
+
+---- SYNCHRONIZATION ----
+
+>> C1: How does your solution guarantee that no more that 3 vehicles
+>> are crossing the bridge in the same direction?
+
+ - We are keeping track of number of vehicles that are currently crossing the bridge in shared variable no_of_vehicles.
+ - We are signalling up vehicle's semaphore to cross the bridge in schedule function only if no_of_vehicles < 3.
+
+>> C2: What prevents vehicles from opposite directions from crossing the
+>> bridge simultaneously?
+
+ - We are keeping track of current direction of vehicles that are currently crossing the bridge in shared variable cur_direction.
+ - In schedule function we are only signalling up vehicle's semaphore if its direction is same as cur_direction (or cur_direction = -1 which denotes no vehicle
+   is currently crossing the bridge) and no_of_vehicles < 3.
+
+>> C3: How does your solution grant priority to emergency vehicles over
+>> the queue of vehicles ahead in the same direction?
+
+ - In schedule function we first check if there is at least one vehicle waiting in the emergency_list, if there is we either signal it (if no_of_vehicles < 3 and 
+   cur_direction is same) or return from the function without scheduling any other vehicle (happens only if the bridge is full or the direction is opposite).
+ - It is guaranteed that all the waiting vehicles in emergency_list will be scheduled with FIFO approach as we are not scheduling any vehicle from normal_list
+   until emergency_list is empty and whenever any vehicle exits the bridge it will call schedule function 3 times. 
+
+>> C4: How do you guarantee that despite having priority, emergency vehicles
+>> do not start crossing the bridge while there are still vehicles crossing
+>> it in the oposite direction?
+
+ - We are only signalling any vehicle's semaphore in schedule function if its direction is same as cur_direction or cur_direction = -1, i.e there is no vehicle
+   crossing the bridge currently.
+
+>> C5: Explain with examples why your solution does not preserve neither
+>> fairness nor freedom from starvation, other than what has been indicated
+>> for emergency vehicles.
+
+ - We are giving priority to emergency vehicle than normal vehicle, so if one normal vehiicle is waiting and there are emergency vehicles coming at every time, then 
+   the normal vehicle will starve until all the emergency vehicles cross the bridge.
+ - We are using FIFO approach each for normal vehicles and emergency vehicles. So, it is ensured that among all normal vehicle one that has waited maximum will cross
+   the bridge when it comes to signal normal vehicles. And among all emergency vehicle one that has waited maximum will cross the bridge when it comes to signal 
+   emergency vehicles. So, there is fairness among normal vehicles and emergency vehicles. But in case of one vehicle from normal_list and one from emergency_list, 
+   emergency vehicle will cross first if both are waiting. 
+
+---- RATIONALE ----
+
+>> C6: Why did you choose this design? Did you consider other design
+>> alternatives? In what ways is it superior to another design you considered?
+
+ - We were inspired from barbershop problem[1] to have semaphore for each vehicle in order to implement FIFO approach for each of emergency and normal vehicles. We thought of an
+   approach without adding vehicles to the emergency_list or normal_list but instead just make the threads run in a while loop at arrivebridge until the vehicle was allowed
+   to cross the bridge. This is not efficient as the thread will be busy waiting.
+   
+
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future semesters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the semester.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+ - The third question was very hard and took a lot of time as we were trying to implement without busy waits.
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+ - The second and third question gave us a better insight about conditional variables and semaphores.
+
+>> Is there some particular fact or hint we should give students in
+>> future semesters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+ - Please specify an inefficient approach or pseudopath that can help us understand it properly.
+ 
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future semesters or the remaining projects?
+
+>> Any other comments?
