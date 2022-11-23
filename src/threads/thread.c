@@ -761,7 +761,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 bool thread_alive(int pid){
   struct list_elem *elem = list_begin(&all_list);
-  while(e!=list_end(&all_list)){
+  while(elem!=list_end(&all_list)){
     struct thread* t =list_entry(elem,struct thread,allelem);
     if(t->tid == pid) return true;
     elem = list_next(elem);
